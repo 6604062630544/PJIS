@@ -58,7 +58,7 @@ def home():
     st.write("The user will be able to select a game and the model will recommend games based on the selected game.")    
 
 def recommend():
-    st.title("🎮Game Recommendation System")
+    st.title("🎮 Game Recommendation System")
 
     # โหลดข้อมูล
     df = pd.read_csv("vgsales.csv")
@@ -67,70 +67,98 @@ def recommend():
     df.dropna(subset=['Publisher'], inplace=True)
     df['Year'] = df['Year'].interpolate(method='linear')
     df["Year"] = df["Year"].astype(int)
-    df = df.reset_index(drop=True)
 
     # สร้าง widget สำหรับเลือกเกม
-    game = st.selectbox("🎯 Select a game", df["Name"].unique())
+    game = st.selectbox("🎯 Select a game", df["Name"])
 
-    # โมเดล Content-Based Filtering
-    df['Combined_Features'] = df['Genre'] + " " + df['Platform'] + " " + df['Publisher']
-    vectorizer = TfidfVectorizer()
-    tfidf_matrix = vectorizer.fit_transform(df['Combined_Features'])
-    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
+    # บันทึกค่าดั้งเดิมก่อนทำ encoding
+    genre_mapping = dict(enumerate(df['Genre'].astype('category').cat.categories))
+    publisher_mapping = dict(enumerate(df['Publisher'].astype('category').cat.categories))
+    platform_mapping = dict(enumerate(df['Platform'].astype('category').cat.categories))
 
-    game_index = df[df['Name'] == game].index[0]
-    similarity_scores = list(enumerate(cosine_sim[game_index]))
-    similarity_scores = sorted(similarity_scores, key=lambda x: x[1], reverse=True)[1:6]
-    recommended_games_content = df.iloc[[i[0] for i in similarity_scores]][['Name', 'Platform', 'Genre', 'Publisher']]
-    
-    # โมเดล Collaborative Filtering (SVD)
-    ratings = pd.DataFrame({
-        'User': np.random.randint(1, 1000, size=len(df)),
-        'Game': df['Name'],
-        'Rating': np.random.randint(1, 6, size=len(df))
-    })
-    ratings = ratings.groupby(['User', 'Game']).mean().reset_index()
-    ratings_pivot = ratings.pivot_table(index='User', columns='Game', values='Rating', aggfunc='mean').fillna(0)
-    matrix = ratings_pivot.values
-    user_means = np.mean(matrix, axis=1)
-    matrix_demeaned = matrix - user_means.reshape(-1, 1)
-    
-    U, sigma, Vt = svds(matrix_demeaned, k=50)
-    sigma = np.diag(sigma)
-    predictions = np.dot(np.dot(U, sigma), Vt) + user_means.reshape(-1, 1)
-    predictions_df = pd.DataFrame(predictions, index=ratings_pivot.index, columns=ratings_pivot.columns)
-    
-    if game in predictions_df.columns:
-        recommended_games_svd = predictions_df[game].sort_values(ascending=False).index[:5].tolist()
-        recommended_games_svd_df = df[df['Name'].isin(recommended_games_svd)][['Name', 'Platform', 'Genre', 'Publisher']]
+    # แปลงหมวดหมู่ข้อมูลเป็นตัวเลข
+    df['Genre'] = df['Genre'].astype('category').cat.codes
+    df['Publisher'] = df['Publisher'].astype('category').cat.codes
+    df['Platform'] = df['Platform'].astype('category').cat.codes
+
+    # Feature Scaling
+    scaler = StandardScaler()
+    features = ['Platform', 'Year', 'Genre', 'Publisher', 'NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']
+    X_scaled = scaler.fit_transform(df[features])
+
+    # Elbow Method
+    wcss = []
+    for i in range(1, 15):
+        kmeans = KMeans(n_clusters=i, random_state=42, n_init=10)
+        kmeans.fit(X_scaled)
+        wcss.append(kmeans.inertia_)
+ 
+    st.subheader("📊 Elbow Method for Optimal k")
+    plt.figure(figsize=(8, 5))
+    plt.plot(range(1, 15), wcss, marker='o', linestyle='--')
+    plt.xlabel('Number of Clusters')
+    plt.ylabel('WCSS')
+    plt.title('Elbow Method')
+    st.pyplot(plt)
+
+    # use เลือกจำนวน cluster
+    k = st.slider("🔢 Select number of clusters for KMeans", 2, 10, 3)
+
+    # เทรนโมเดล KMeans
+    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+    kmeans.fit(X_scaled)
+    df['Cluster'] = kmeans.labels_
+
+    # แปลงกลับเป็นชื่อเดิม   
+    df['Genre'] = df['Genre'].map(genre_mapping)
+    df['Publisher'] = df['Publisher'].map(publisher_mapping)
+    df['Platform'] = df['Platform'].map(platform_mapping)
+
+    # แนะนำเกม (KMeans)
+    st.subheader("🎮 Recommended Games (KMeans)")
+    game_cluster = df[df['Name'] == game]['Cluster'].values[0]
+    recommended_games_kmeans = df[(df['Cluster'] == game_cluster) & (df['Name'] != game)]
+
+    if recommended_games_kmeans.empty:
+        st.write("❌ No similar games found.")
     else:
-        recommended_games_svd_df = pd.DataFrame()
-    
-    # Hybrid Model (Combine Scores)
-    st.subheader("📌 Recommended Games")
-    
-    hybrid_scores = {}
-    for i, row in recommended_games_content.iterrows():
-        hybrid_scores[row['Name']] = hybrid_scores.get(row['Name'], 0) + 0.5  # 50% weight for Content-Based
-    
-    for i, row in recommended_games_svd_df.iterrows():
-        hybrid_scores[row['Name']] = hybrid_scores.get(row['Name'], 0) + 0.5  # 50% weight for SVD
-    
-    hybrid_recommendations = sorted(hybrid_scores.items(), key=lambda x: x[1], reverse=True)[:5]
-    hybrid_recommendations_df = df[df['Name'].isin([game[0] for game in hybrid_recommendations])][['Name', 'Platform', 'Genre', 'Publisher']]
-    st.dataframe(hybrid_recommendations_df)    
-    
+        st.write(recommended_games_kmeans[['Name', 'Platform', 'Year', 'Genre', 'Publisher']])
+
+    # ประเมินโมเดล KMeans
+    silhouette = silhouette_score(X_scaled, kmeans.labels_)
+    st.subheader("📊 Model Evaluation (KMeans)")
+    st.write(f"✔️ Silhouette Score: {silhouette:.4f} (higher is better)")
     st.write('---')
 
-    # ประเมินโมเดล
-    st.subheader("📊 Model Evaluation")
-    mean_cosine_sim = np.mean([i[1] for i in similarity_scores])
-    explained_variance = np.sum(sigma**2) / np.sum(np.var(matrix_demeaned, axis=0))
-    
-    st.write(f"✔️ Mean Cosine Similarity (Content-Based): {mean_cosine_sim:.4f}")
-    st.write(f"✔️ Explained Variance (SVD): {explained_variance:.4f}")
+    # เทรนโมเดล DBSCAN
+    dbscan = DBSCAN(eps=1.0, min_samples=5)  # Adjust `eps` for better clustering
+    dbscan.fit(X_scaled)
+    df['Cluster_DBSCAN'] = dbscan.labels_
 
-    st.write('---')
+    # แนะนำเกม DBSCAN
+    st.subheader("🎮 Recommended Games (DBSCAN)")
+    game_cluster_dbscan = df[df['Name'] == game]['Cluster_DBSCAN'].values[0]
+
+    if game_cluster_dbscan == -1:
+        st.write("❌ This game is classified as noise/outlier in DBSCAN.")
+    else:
+        recommended_games_dbscan = df[(df['Cluster_DBSCAN'] == game_cluster_dbscan) & (df['Name'] != game)]
+        if recommended_games_dbscan.empty:
+            st.write("❌ No similar games found.")
+        else:
+            st.write(recommended_games_dbscan[['Name', 'Platform', 'Year', 'Genre', 'Publisher']])
+
+    st.write('---------------------------------')
+
+    # ประเมินโมเดล DBSCAN
+    silhouette_dbscan = silhouette_score(X_scaled, dbscan.labels_)
+    st.subheader("📊 Model Evaluation (DBSCAN)")
+    st.write(f"✔️ Silhouette Score: {silhouette_dbscan:.4f} (higher is better)")
+
+    # แสดงจำนวน cluster
+    # st.subheader("📊 Number of Clusters")
+    # st.write(f"✅ KMeans: {len(set(kmeans.labels_))} clusters")
+    # st.write(f"✅ DBSCAN: {len(set(dbscan.labels_))} clusters (including noise)")
 
 def home2():
     st.title("Lung Disease Prediction Model Description")
