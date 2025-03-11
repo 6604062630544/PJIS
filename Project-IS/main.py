@@ -63,7 +63,7 @@ def recommend():
 
     # โหลดข้อมูล
     df = pd.read_csv("vgsales.csv")
-    
+
     # ทำความสะอาดข้อมูล
     df.dropna(subset=['Publisher'], inplace=True)
     df['Year'] = df['Year'].interpolate(method='linear')
