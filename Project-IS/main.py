@@ -9,7 +9,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from tensorflow import keras
 from tensorflow.keras import layers
-import requests
 
 Dense = layers.Dense
 BatchNormalization = layers.BatchNormalization
