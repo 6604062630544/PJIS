@@ -9,7 +9,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from tensorflow import keras
 from tensorflow.keras import layers
-import requests
 
 Dense = layers.Dense
 BatchNormalization = layers.BatchNormalization
@@ -63,11 +62,7 @@ def recommend():
 
     # โหลดข้อมูล
     url = "https://raw.githubusercontent.com/6604062630544/PJIS/main/Project-IS/vgsales.csv"
-    response = requests.get(url)
-    open("vgsales.csv", "wb").write(response.content)  # บันทึกไฟล์
-
-    df = pd.read_csv("vgsales.csv")
-    print(df.head()) 
+    df = pd.read_csv(url)
 
     # ทำความสะอาดข้อมูล
     df.dropna(subset=['Publisher'], inplace=True)
