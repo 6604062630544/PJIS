@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from tensorflow import keras
 from tensorflow.keras import layers
+import os
 
 Dense = layers.Dense
 BatchNormalization = layers.BatchNormalization
@@ -61,7 +62,7 @@ def recommend():
     st.title("🎮Game Recommendation System")
 
     # โหลดข้อมูล
-    df = pd.read_csv("vg_sales.csv")
+    df = pd.read_csv("vgsales.csv")        
 
     # ทำความสะอาดข้อมูล
     df.dropna(subset=['Publisher'], inplace=True)
