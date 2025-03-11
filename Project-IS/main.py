@@ -62,8 +62,10 @@ def recommend():
     st.title("🎮Game Recommendation System")
 
     # โหลดข้อมูล
-    url = "https://raw.githubusercontent.com/6604062630544/PJIS/main/Project-IS/vgsales_data.csv"
-    df = pd.read_csv(url)
+    # url = "https://raw.githubusercontent.com/6604062630544/PJIS/main/Project-IS/vgsales_data.csv"
+    # df = pd.read_csv(url)
+
+    df = pd.read_csv("vgsales_data.csv")
 
 
     # ทำความสะอาดข้อมูล
