@@ -2,10 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from scipy.sparse.linalg import svds
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from tensorflow import keras
@@ -17,98 +16,122 @@ Dropout = layers.Dropout
 import matplotlib.pyplot as plt
 
 def home():
-    st.title("Predict Expected Goal Model Description")
+    st.title("Recommend Games Model Description")
 
     st.subheader("Purpose")
-    st.write("The purpose of this project is to build a model that can predict the expected goals of a player based on a variety of features like minutes played, shots, assists, and more. This model will help football clubs and fantasy football players assess the goal-scoring potential of a player and make informed decisions about team selection and transfers.")
+    st.write("The purpose of this project is to build a model that can recommend games to users based on their preferences.")
 
     st.subheader("Problem Type")
+    st.write("This is a recommendation problem.")
 
     st.subheader("Source Data")
-    st.write("this dataset come from https://www.kaggle.com/datasets/meraxes10/fantasy-premier-league-dataset-2024-2025")
+    st.write("this dataset come from https://www.kaggle.com/datasets/anandshaw2001/video-game-sales")
 
     st.subheader("Data")
-    st.write("The dataset contains several important attributes related to football players and their performance from players.csv, including:")
+    st.write("The dataset contains the following columns:")
+    st.write("1. Name: The name of the game.")
+    st.write("2. Platform: The platform of the game.")
+    st.write("3. Year: The year the game was released.")
+    st.write("4. Genre: The genre of the game.")
+    st.write("5. Publisher: The publisher of the game.")
+    st.write("6. NA_Sales: The sales of the game in North America.")
+    st.write("7. EU_Sales: The sales of the game in Europe.")
+    st.write("8. JP_Sales: The sales of the game in Japan.")
+    st.write("9. Other_Sales: The sales of the game in other regions.")
+    st.write("10. Global_Sales: The global sales of the game.")
     
     st.subheader("Data Cleaning")
+    st.write("We will be cleaning the data by removing missing values and duplicates.")
+    st.write("We will also be removing the columns that are not needed for the model.")
 
     st.subheader("Model")
-    st.write("Random Forest Regressor will be used to predict the expected goals of a player based on the cleaned and processed player data. This model is designed to handle non-linear relationships in the data and perform well with regression tasks.")
-    st.write("We also used the Linear Regression model to predict the expected goals of a player based on the cleaned and processed player data. This model is designed to handle linear relationships in the data and perform well with regression tasks.")
+    st.write("We will be building a Content-Based Filtering model and a Collaborative Filtering model.")
+    st.write("The Content-Based Filtering model will recommend games based on the similarity of their features.")
+    st.write("The Collaborative Filtering model will recommend games based on the ratings given by users.")
+    st.write("We will also be building a Hybrid model that combines the scores of the Content-Based Filtering model and the Collaborative Filtering model.")
 
     st.subheader("Evaluation")
+    st.write("We will be evaluating the models using Mean Cosine Similarity for the Content-Based Filtering model and Explained Variance for the Collaborative Filtering model.")
 
     st.subheader("Deployment")
+    st.write("We will be deploying the model using Streamlit.")
+    st.write("The user will be able to select a game and the model will recommend games based on the selected game.")    
 
-def load_data():
-    df = pd.read_csv("players.csv")
+def recommend():
+    st.title("🎮Game Recommendation System")
+
+    # โหลดข้อมูล
+    df = pd.read_csv("vgsales_data.csv")
+
+
+    # ทำความสะอาดข้อมูล
+    df.dropna(subset=['Publisher'], inplace=True)
+    df['Year'] = df['Year'].interpolate(method='linear')
+    df["Year"] = df["Year"].astype(int)
+    df = df.reset_index(drop=True)
+
+    # สร้าง widget สำหรับเลือกเกม
+    game = st.selectbox("🎯 Select a game", df["Name"].unique())
+
+    # โมเดล Content-Based Filtering
+    df['Combined_Features'] = df['Genre'] + " " + df['Platform'] + " " + df['Publisher']
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform(df['Combined_Features'])
+    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
+
+    game_index = df[df['Name'] == game].index[0]
+    similarity_scores = list(enumerate(cosine_sim[game_index]))
+    similarity_scores = sorted(similarity_scores, key=lambda x: x[1], reverse=True)[1:6]
+    recommended_games_content = df.iloc[[i[0] for i in similarity_scores]][['Name', 'Platform', 'Genre', 'Publisher']]
     
-    # ตรวจสอบและลบโค้ชออก (หากมีคอลัมน์ที่เกี่ยวข้อง เช่น 'position')
-    if "position" in df.columns:
-        df = df[df["position"].notna()]  # ลบแถวที่ไม่มีตำแหน่งระบุ
+    # โมเดล Collaborative Filtering (SVD)
+    ratings = pd.DataFrame({
+        'User': np.random.randint(1, 1000, size=len(df)),
+        'Game': df['Name'],
+        'Rating': np.random.randint(1, 6, size=len(df))
+    })
+    ratings = ratings.groupby(['User', 'Game']).mean().reset_index()
+    ratings_pivot = ratings.pivot_table(index='User', columns='Game', values='Rating', aggfunc='mean').fillna(0)
+    matrix = ratings_pivot.values
+    user_means = np.mean(matrix, axis=1)
+    matrix_demeaned = matrix - user_means.reshape(-1, 1)
     
-    return df
+    U, sigma, Vt = svds(matrix_demeaned, k=50)
+    sigma = np.diag(sigma)
+    predictions = np.dot(np.dot(U, sigma), Vt) + user_means.reshape(-1, 1)
+    predictions_df = pd.DataFrame(predictions, index=ratings_pivot.index, columns=ratings_pivot.columns)
+    
+    if game in predictions_df.columns:
+        recommended_games_svd = predictions_df[game].sort_values(ascending=False).index[:5].tolist()
+        recommended_games_svd_df = df[df['Name'].isin(recommended_games_svd)][['Name', 'Platform', 'Genre', 'Publisher']]
+    else:
+        recommended_games_svd_df = pd.DataFrame()
+    
+    # Hybrid Model (Combine Scores)
+    st.subheader("📌 Recommended Games")
+    
+    hybrid_scores = {}
+    for i, row in recommended_games_content.iterrows():
+        hybrid_scores[row['Name']] = hybrid_scores.get(row['Name'], 0) + 0.5  # 50% weight for Content-Based
+    
+    for i, row in recommended_games_svd_df.iterrows():
+        hybrid_scores[row['Name']] = hybrid_scores.get(row['Name'], 0) + 0.5  # 50% weight for SVD
+    
+    hybrid_recommendations = sorted(hybrid_scores.items(), key=lambda x: x[1], reverse=True)[:5]
+    hybrid_recommendations_df = df[df['Name'].isin([game[0] for game in hybrid_recommendations])][['Name', 'Platform', 'Genre', 'Publisher']]
+    st.dataframe(hybrid_recommendations_df)    
+    
+    st.write('---')
 
-def recommend(): 
+    # ประเมินโมเดล
+    st.subheader("📊 Model Evaluation")
+    mean_cosine_sim = np.mean([i[1] for i in similarity_scores])
+    explained_variance = np.sum(sigma**2) / np.sum(np.var(matrix_demeaned, axis=0))
+    
+    st.write(f"✔️ Mean Cosine Similarity (Content-Based): {mean_cosine_sim:.4f}")
+    st.write(f"✔️ Explained Variance (SVD): {explained_variance:.4f}")
 
-    df = load_data()
-
-    # เลือก features และ target
-    features = ["now_cost", "threat_rank", "expected_assists", "total_points"]
-    target = "expected_goals"
-
-    # เตรียมข้อมูล
-    X = df[features]
-    y = df[target]
-
-    # ลบ target column ออกจาก X ก่อน training
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    # ปรับค่า Feature Scaling
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-
-    # เทรนโมเดล
-    rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
-    rf_model.fit(X_train_scaled, y_train)
-
-    lr_model = LinearRegression()
-    lr_model.fit(X_train_scaled, y_train)
-
-    # ทำนาย
-    rf_preds = rf_model.predict(X_test_scaled)
-    lr_preds = lr_model.predict(X_test_scaled)
-
-    # คำนวณค่าความแม่นยำ
-    rf_mae = mean_absolute_error(y_test, rf_preds)
-    lr_mae = mean_absolute_error(y_test, lr_preds)
-    rf_r2 = r2_score(y_test, rf_preds)
-    lr_r2 = r2_score(y_test, lr_preds)
-
-    # Streamlit UI
-    st.title("⚽ Expected Goals Prediction")
-
-    # เลือกทีมก่อน
-    selected_team = st.selectbox("Select a team", df["team"].unique())
-
-    # เลือกผู้เล่นจากทีม
-    players = df[df["team"] == selected_team]["name"].values
-    selected_player = st.selectbox("Select a player", players)
-
-    player_data = df[df["name"] == selected_player][features]
-    player_scaled = scaler.transform(player_data)
-
-    rf_prediction = rf_model.predict(player_scaled)[0]
-    lr_prediction = lr_model.predict(player_scaled)[0]
-
-    st.subheader("Predicted Goals")
-    st.write(f"Random Forest: {rf_prediction:.2f}")
-    st.write(f"Linear Regression: {lr_prediction:.2f}")
-
-    st.subheader("Model Performance")
-    st.write(f"Random Forest - MAE: {rf_mae:.4f}, R²: {rf_r2:.4f}")
-    st.write(f"Linear Regression - MAE: {lr_mae:.4f}, R²: {lr_r2:.4f}")
+    st.write('---')
 
 def home2():
     st.title("Lung Disease Prediction Model Description")
