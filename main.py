@@ -88,9 +88,9 @@ def preexpectedgoal():
     # Streamlit UI
     st.title("⚽ Expected Goals Prediction")
     
-    selected_team = st.selectbox("Select a team", df["team"].unique())
+    selected_team = st.selectbox("🎯 Select a team", df["team"].unique())
     players = df[df["team"] == selected_team]["name"].values
-    selected_player = st.selectbox("Select a player", players)
+    selected_player = st.selectbox("🎯 Select a player", players)
     
     player_data = df[df["name"] == selected_player]
     player_features = player_data[features]
@@ -103,11 +103,11 @@ def preexpectedgoal():
     player_position = player_data["position"].values[0]
     st.write(f"**Position:** {player_position}")
     
-    st.subheader("Expected Goals")
+    st.subheader("⚽ Expected Goals")
     st.write(f"Random Forest: {rf_prediction:.2f}")
     st.write(f"Linear Regression: {lr_prediction:.2f}")    
     
-    st.subheader("Model Performance")
+    st.subheader("📊 Model Performance")
     st.write(f"Random Forest - MAE: {rf_mae:.4f}, R²: {rf_r2:.4f}")
     st.write(f"Linear Regression - MAE: {lr_mae:.4f}, R²: {lr_r2:.4f}")
     
