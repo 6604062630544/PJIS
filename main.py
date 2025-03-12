@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
@@ -43,72 +45,99 @@ def home():
 def load_data():
     df = pd.read_csv("players.csv")
     
-    # ตรวจสอบและลบโค้ชออก (หากมีคอลัมน์ที่เกี่ยวข้อง เช่น 'position')
-    if "position" in df.columns:
-        df = df[df["position"].notna()]  # ลบแถวที่ไม่มีตำแหน่งระบุ
+    # กรองข้อมูลเฉพาะนักเตะที่ลงเล่นจริง และไม่ใช่ผู้จัดการ (MNG)
+    df = df[(df["minutes"] > 0) & (df["position"] != "MNG")]
     
     return df
 
-def recommend(): 
-
+def recommend():
     df = load_data()
-
-    # เลือก features และ target
-    features = ["now_cost", "threat_rank", "expected_assists", "total_points"]
+    
+    # เลือก Features และ Target
+    features = ["now_cost", "threat_rank", "expected_assists", "total_points", "influence", "creativity", "minutes", "starts", "goals_scored"]
     target = "expected_goals"
-
-    # เตรียมข้อมูล
+    
     X = df[features]
     y = df[target]
-
-    # ลบ target column ออกจาก X ก่อน training
+    
+    # แบ่งข้อมูล train-test
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
+    
     # ปรับค่า Feature Scaling
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
-
+    
     # เทรนโมเดล
-    rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+    rf_model = RandomForestRegressor(n_estimators=200, random_state=42, max_depth=10)
     rf_model.fit(X_train_scaled, y_train)
-
+    
     lr_model = LinearRegression()
     lr_model.fit(X_train_scaled, y_train)
-
+    
     # ทำนาย
     rf_preds = rf_model.predict(X_test_scaled)
     lr_preds = lr_model.predict(X_test_scaled)
-
+    
     # คำนวณค่าความแม่นยำ
     rf_mae = mean_absolute_error(y_test, rf_preds)
     lr_mae = mean_absolute_error(y_test, lr_preds)
     rf_r2 = r2_score(y_test, rf_preds)
     lr_r2 = r2_score(y_test, lr_preds)
-
+    
     # Streamlit UI
     st.title("⚽ Expected Goals Prediction")
-
-    # เลือกทีมก่อน
+    
     selected_team = st.selectbox("Select a team", df["team"].unique())
-
-    # เลือกผู้เล่นจากทีม
     players = df[df["team"] == selected_team]["name"].values
     selected_player = st.selectbox("Select a player", players)
-
-    player_data = df[df["name"] == selected_player][features]
-    player_scaled = scaler.transform(player_data)
-
+    
+    player_data = df[df["name"] == selected_player]
+    player_features = player_data[features]
+    player_scaled = scaler.transform(player_features)
+    
     rf_prediction = rf_model.predict(player_scaled)[0]
     lr_prediction = lr_model.predict(player_scaled)[0]
-
-    st.subheader("Predicted Goals")
+    
+    # แสดงตำแหน่งของนักเตะที่เลือก
+    player_position = player_data["position"].values[0]
+    st.write(f"**Position:** {player_position}")
+    
+    st.subheader("Expected Goals")
     st.write(f"Random Forest: {rf_prediction:.2f}")
-    st.write(f"Linear Regression: {lr_prediction:.2f}")
-
+    st.write(f"Linear Regression: {lr_prediction:.2f}")    
+    
     st.subheader("Model Performance")
     st.write(f"Random Forest - MAE: {rf_mae:.4f}, R²: {rf_r2:.4f}")
     st.write(f"Linear Regression - MAE: {lr_mae:.4f}, R²: {lr_r2:.4f}")
+    
+    # แสดงกราฟเปรียบเทียบค่าที่ทำนายกับค่าจริง
+    st.subheader("📊 Predicted vs Actual Goals")
+    plt.figure(figsize=(8, 5))
+    sns.scatterplot(x=y_test, y=rf_preds, label="Random Forest", alpha=0.6)
+    sns.scatterplot(x=y_test, y=lr_preds, label="Linear Regression", alpha=0.6)
+    plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], "k--", lw=2)
+    plt.xlabel("Actual Goals")
+    plt.ylabel("Predicted Goals")
+    plt.title("Predicted vs Actual Goals")
+    plt.legend()
+    st.pyplot(plt)
+    
+    # แสดง Residual Plot
+    st.subheader("📉 Residual Plot")
+    rf_residuals = y_test - rf_preds
+    lr_residuals = y_test - lr_preds
+    
+    plt.figure(figsize=(8, 5))
+    sns.scatterplot(x=y_test, y=rf_residuals, label="Random Forest", alpha=0.6)
+    sns.scatterplot(x=y_test, y=lr_residuals, label="Linear Regression", alpha=0.6)
+    plt.axhline(y=0, color="k", linestyle="--", lw=2)
+    plt.xlabel("Actual Goals")
+    plt.ylabel("Residuals (Error)")
+    plt.title("Residual Plot")
+    plt.legend()
+    st.pyplot(plt)
+
 
 def home2():
     st.title("Lung Disease Prediction Model Description")
