@@ -50,7 +50,7 @@ def load_data():
     
     return df
 
-def recommend():
+def preexpectedgoal():
     df = load_data()
     
     # เลือก Features และ Target
@@ -226,18 +226,9 @@ def home2():
 def predrecover():
     st.title("Lung Disease Prediction Model")
 
-    age = st.number_input("Enter Age", min_value=0, max_value=120, value=30)
-    lung_capacity = st.number_input("Enter Lung Capacity", min_value=0.5, max_value=6.0, value=3.5)
-    hospital_visits = st.number_input("Enter Number of Hospital Visits", min_value=0, max_value=100, value=3)
-
-    gender = st.selectbox("Select Gender", ["Male", "Female"])
-    smoking_status = st.selectbox("Select Smoking Status", ["Smoker", "Non-Smoker"])
-    disease_type = st.selectbox("Select Disease Type", ["Asthma", "COPD", "Pneumonia"])
-    treatment_type = st.selectbox("Select Treatment Type", ["Medication", "Therapy", "Surgery"])
-
-    # Button to trigger model training
-    if st.button("Start Model Training"):
-        # Load the dataset
+    # Load and preprocess the dataset
+    @st.cache_resource    
+    def train_model():
         df = pd.read_csv("lung_disease_data.csv")
 
         # Handle missing values
@@ -254,112 +245,111 @@ def predrecover():
             df[col] = le.fit_transform(df[col])
             label_encoders[col] = le
 
-        # Separate features and target
+        # Prepare features and target
         X = df.drop(columns=["Recovered"])
         y = df["Recovered"]
 
-        # Normalize numerical features
+        # Normalize numeric features
         scaler = StandardScaler()
         X[num_cols] = scaler.fit_transform(X[num_cols])
 
-        # Split data
+        # Split dataset
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        # Define model
+        # Define and compile model
         model = keras.Sequential([
-          Dense(512, activation='relu', input_shape=(X_train.shape[1],)),
-          BatchNormalization(),
-          Dropout(0.3),
-          Dense(256, activation='relu'),
-          BatchNormalization(),
-          Dropout(0.3),
-          Dense(128, activation='relu'),
-          BatchNormalization(),
-          Dropout(0.2),
-          Dense(64, activation='relu'),
-          Dropout(0.1),
-          Dense(1, activation='sigmoid')
+            Dense(512, activation='relu', input_shape=(X_train.shape[1],)),
+            BatchNormalization(),
+            Dropout(0.3),
+            Dense(256, activation='relu'),
+            BatchNormalization(),
+            Dropout(0.3),
+            Dense(128, activation='relu'),
+            BatchNormalization(),
+            Dropout(0.2),
+            Dense(64, activation='relu'),
+            Dropout(0.1),
+            Dense(1, activation='sigmoid')
         ])
 
-        # Compile model
         model.compile(optimizer="adam", loss="binary_crossentropy", metrics=["accuracy"])
 
-        # Train the model
-        with st.spinner('Training model... please wait'):
-            history = model.fit(X_train, y_train, epochs=100, batch_size=64, validation_split=0.2)
+        # Train model
+        history = model.fit(X_train, y_train, epochs=100, batch_size=64, validation_split=0.2)
 
-            # Evaluate the model
-            train_loss, train_acc = model.evaluate(X_train, y_train)
-            test_loss, test_acc = model.evaluate(X_test, y_test)
+        return model, scaler, label_encoders, history
 
-            # Display results in Streamlit
-            st.write(f"**Training Accuracy:** {train_acc:.4f}")
-            st.write(f"**Validation Accuracy:** {test_acc:.4f}")
-            st.write(f"**Training Loss:** {train_loss:.4f}")
-            st.write(f"**Validation Loss:** {test_loss:.4f}")
+    # Train and cache the model
+    model, scaler, label_encoders, history = train_model()
 
-            # Plot accuracy and loss graphs
-            fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+    # Display accuracy and loss plots
+    st.subheader("Model Performance")
+    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
 
-            # Accuracy Plot
-            ax[0].plot(history.history["accuracy"], label="Train Accuracy", color="blue")
-            ax[0].plot(history.history["val_accuracy"], label="Validation Accuracy", color="orange")
-            ax[0].set_xlabel("Epoch")
-            ax[0].set_ylabel("Accuracy")
-            ax[0].set_title("Model Accuracy")
-            ax[0].legend()
+    ax[0].plot(history.history["accuracy"], label="Train Accuracy", color="blue")
+    ax[0].plot(history.history["val_accuracy"], label="Validation Accuracy", color="orange")
+    ax[0].set_xlabel("Epoch")
+    ax[0].set_ylabel("Accuracy")
+    ax[0].set_title("Model Accuracy")
+    ax[0].legend()
 
-            # Loss Plot
-            ax[1].plot(history.history["loss"], label="Train Loss", color="blue")
-            ax[1].plot(history.history["val_loss"], label="Validation Loss", color="orange")
-            ax[1].set_xlabel("Epoch")
-            ax[1].set_ylabel("Loss")
-            ax[1].set_title("Model Loss")
-            ax[1].legend()
+    ax[1].plot(history.history["loss"], label="Train Loss", color="blue")
+    ax[1].plot(history.history["val_loss"], label="Validation Loss", color="orange")
+    ax[1].set_xlabel("Epoch")
+    ax[1].set_ylabel("Loss")
+    ax[1].set_title("Model Loss")
+    ax[1].legend()
 
-            st.pyplot(fig)
+    st.pyplot(fig)   
 
-            # User input data
-            user_data = {
-                "Age": age,
-                "Lung Capacity": lung_capacity,
-                "Hospital Visits": hospital_visits,
-                "Gender": gender,
-                "Smoking Status": smoking_status,
-                "Disease Type": disease_type,
-                "Treatment Type": treatment_type
-            }
+    # User inputs
+    st.subheader("Input Data for Prediction")
+    age = st.number_input("Enter Age", min_value=0, max_value=120, value=30)
+    lung_capacity = st.number_input("Enter Lung Capacity", min_value=0.5, max_value=6.0, value=3.5)
+    hospital_visits = st.number_input("Enter Number of Hospital Visits", min_value=0, max_value=100, value=3)
 
-            # Encode user input as the model expects
-            user_data_encoded = pd.DataFrame([user_data])
-            for col in ["Gender", "Smoking Status", "Disease Type", "Treatment Type"]:
-                le = label_encoders[col]
-                # Check for unseen labels
-                if not all(user_data_encoded[col].isin(le.classes_)):
-                    unseen_labels = set(user_data_encoded[col]) - set(le.classes_)
-                     
-                    # Handle unseen labels by replacing with the first class
-                    user_data_encoded[col] = le.transform(user_data_encoded[col].replace(unseen_labels, le.classes_[0]))
-                else:
-                    user_data_encoded[col] = le.transform(user_data_encoded[col])
+    gender = st.selectbox("Select Gender", ["Male", "Female"])
+    smoking_status = st.selectbox("Select Smoking Status", ["Smoker", "Non-Smoker"])
+    disease_type = st.selectbox("Select Disease Type", ["Asthma", "COPD", "Pneumonia"])
+    treatment_type = st.selectbox("Select Treatment Type", ["Medication", "Therapy", "Surgery"])
 
-            # Normalize numerical features
-            user_data_encoded[num_cols] = scaler.transform(user_data_encoded[num_cols])
+    # Prediction button
+    if st.button("Predict Outcome"):
+        user_data = {
+            "Age": age,
+            "Lung Capacity": lung_capacity,
+            "Hospital Visits": hospital_visits,
+            "Gender": gender,
+            "Smoking Status": smoking_status,
+            "Disease Type": disease_type,
+            "Treatment Type": treatment_type
+        }
 
-            # Predict the outcome (recovered or not)
-            prediction = model.predict(user_data_encoded)
-            if prediction[0][0] > 0.5:
-                st.write("Prediction: The person is likely to recover.")
+        # Encode and normalize input
+        user_data_encoded = pd.DataFrame([user_data])
+        for col in ["Gender", "Smoking Status", "Disease Type", "Treatment Type"]:
+            le = label_encoders[col]
+            if not all(user_data_encoded[col].isin(le.classes_)):
+                user_data_encoded[col] = le.transform(user_data_encoded[col].replace(set(user_data_encoded[col]) - set(le.classes_), le.classes_[0]))
             else:
-                st.write("Prediction: The person is unlikely to recover.")
+                user_data_encoded[col] = le.transform(user_data_encoded[col])
+
+        user_data_encoded[["Age", "Lung Capacity", "Hospital Visits"]] = scaler.transform(user_data_encoded[["Age", "Lung Capacity", "Hospital Visits"]])
+
+        # Make prediction
+        prediction = model.predict(user_data_encoded)
+        if prediction[0][0] > 0.5:
+            st.write("Prediction: The person is likely to recover.")
+        else:
+            st.write("Prediction: The person is unlikely to recover.")
 
 def main():    
-    page = st.sidebar.selectbox("Choose a page", ["Machine Model Description", "Recommend Games", "Neuron Network Description", "Lung Disease Prediction"])
+    page = st.sidebar.selectbox("Choose a page", ["Machine Model Description", "Expected Goals Prediction", "Neural Network Description", "Lung Disease Prediction"])
     if page == "Machine Model Description":
         home()
-    elif page == "Recommend Games":
-        recommend()
-    elif page == "Neuron Network Description":
+    elif page == "Expected Goals Prediction":
+        preexpectedgoal()
+    elif page == "Neural Network Description":
         home2()
     elif page == "Lung Disease Prediction":
         predrecover()
