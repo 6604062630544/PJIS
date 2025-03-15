@@ -19,73 +19,113 @@ Dropout = layers.Dropout
 import matplotlib.pyplot as plt
 
 def home():
-    st.title("Predict Expected Goal Model Description")
+    st.title("Expected Goals Prediction Model Description")
 
-    st.subheader("Purpose")
-    st.write("The purpose of this project is to build a model that can predict the expected goals of a player based on a variety of features like minutes played, shots, assists, and more. This model will help football clubs and fantasy football players assess the goal-scoring potential of a player and make informed decisions about team selection and transfers.")
+    st.header("Purpose")
+    st.write("""
+    This project aims to build a model that predicts the expected goals (xG) of football players based on various performance metrics.
+    The prediction helps in evaluating a player's offensive contribution and assists teams in making informed strategic decisions.
+    """)
 
-    st.subheader("Problem Type")
+    st.header("Problem Type")
+    st.write("""
+    This is a **regression problem**, where the model predicts a continuous numerical value (expected goals) based on player statistics.
+    """)
 
-    st.subheader("Source Data")
-    st.write("this dataset come from https://www.kaggle.com/datasets/meraxes10/fantasy-premier-league-dataset-2024-2025")
+    st.header("Source Data")
+    st.write("The dataset used in this project comes from Kaggle:")
+    st.write("[Fantasy Premier League]( https://www.kaggle.com/datasets/meraxes10/fantasy-premier-league-dataset-2024-2025) and contains several important attributes related to football players and their performance, including:")
+    st.write("""
+    - **name**: The name of the player.             
+    - **now_cost**: The current cost of the player.    
+    - **position**: The player's on-field position (e.g., Forward, Midfielder, Defender, Goalkeeper).
+    - **team**: The club or team the player is currently playing for.
+    - **threat_rank**: The ranking of the player's offensive threat.
+    - **expected_assists**: The estimated number of assists based on previous performances.
+    - **total_points**: Total points accumulated by the player.
+    - **influence**: The player's impact on the game. 
+    - **creativity**: The player's creative ability to generate chances.
+    - **minutes**: Total minutes played.
+    - **starts**: Number of times the player started in a match.
+    - **goals_scored**: The actual number of goals scored by the player.
+    - **expected_goals (target)**: The predicted metric estimating goal probability.
+    """)
 
-    st.subheader("Data")
-    st.write("The dataset contains several important attributes related to football players and their performance from players.csv, including:")
-    
-    st.subheader("Data Cleaning")
+    st.header("Model")
+    st.write("""
+    Two machine learning models are used to predict Expected Goals (xG):
 
-    st.subheader("Model")
-    st.write("Random Forest Regressor will be used to predict the expected goals of a player based on the cleaned and processed player data. This model is designed to handle non-linear relationships in the data and perform well with regression tasks.")
-    st.write("We also used the Linear Regression model to predict the expected goals of a player based on the cleaned and processed player data. This model is designed to handle linear relationships in the data and perform well with regression tasks.")
+    - **Random Forest Regressor**: A robust ensemble learning model that improves prediction accuracy by combining multiple decision trees.
 
-    st.subheader("Evaluation")
+    - **Linear Regression**: A simple and interpretable model that establishes relationships between features and target values.
 
-    st.subheader("Deployment")
+    The models are trained using historical player performance data, and feature scaling is applied to ensure proper normalization.
+    """)
 
-def load_data():
+    st.header("Data Preparation")
+    st.write("""
+
+    **Filtering Data**:
+    1. Only players who have played actual minutes are included.
+    2. Managers (MNG) are excluded from the dataset.
+
+    **Feature Selection**:
+    Key attributes that contribute to goal-scoring potential are chosen.
+
+    **Data Scaling**:
+    Features are normalized using StandardScaler to improve model performance.
+
+    **Train-Test Split**:
+    The dataset is split into 80% training and 20% testing to evaluate model accuracy.
+    """)
+
+    st.header("Model Performance")
+    st.write("""
+    The model's performance is evaluated using two key metrics:
+
+    - **Mean Absolute Error (MAE)**: Measures the average prediction error.
+
+    - **R² Score**: Indicates how well the model explains variance in actual goals scored.
+
+    Comparison of model performance is displayed in the UI, along with Predicted vs Actual Goals and Residual Plots to analyze errors.
+    """)
+
+    st.header("Deployment")
+    st.write("""
+    After the model is trained and evaluated, it will be deployed using **Streamlit**, a Python library that allows the creation of web applications. 
+    """)
+
+def preexpectedgoal():    
     df = pd.read_csv("players.csv")
     
-    # กรองข้อมูลเฉพาะนักเตะที่ลงเล่นจริง และไม่ใช่ผู้จัดการ (MNG)
     df = df[(df["minutes"] > 0) & (df["position"] != "MNG")]
     
-    return df
-
-def preexpectedgoal():
-    df = load_data()
-    
-    # เลือก Features และ Target
     features = ["now_cost", "threat_rank", "expected_assists", "total_points", "influence", "creativity", "minutes", "starts", "goals_scored"]
     target = "expected_goals"
     
     X = df[features]
     y = df[target]
     
-    # แบ่งข้อมูล train-test
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
-    # ปรับค่า Feature Scaling
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
     
-    # เทรนโมเดล
     rf_model = RandomForestRegressor(n_estimators=200, random_state=42, max_depth=10)
     rf_model.fit(X_train_scaled, y_train)
     
     lr_model = LinearRegression()
     lr_model.fit(X_train_scaled, y_train)
     
-    # ทำนาย
     rf_preds = rf_model.predict(X_test_scaled)
     lr_preds = lr_model.predict(X_test_scaled)
     
-    # คำนวณค่าความแม่นยำ
     rf_mae = mean_absolute_error(y_test, rf_preds)
     lr_mae = mean_absolute_error(y_test, lr_preds)
     rf_r2 = r2_score(y_test, rf_preds)
     lr_r2 = r2_score(y_test, lr_preds)
     
-    # Streamlit UI
     st.title("⚽ Expected Goals Prediction")
     
     selected_team = st.selectbox("🎯 Select a team", df["team"].unique())
@@ -99,7 +139,6 @@ def preexpectedgoal():
     rf_prediction = rf_model.predict(player_scaled)[0]
     lr_prediction = lr_model.predict(player_scaled)[0]
     
-    # แสดงตำแหน่งของนักเตะที่เลือก
     player_position = player_data["position"].values[0]
     st.write(f"**Position:** {player_position}")
     
@@ -111,8 +150,8 @@ def preexpectedgoal():
     st.write(f"Random Forest - MAE: {rf_mae:.4f}, R²: {rf_r2:.4f}")
     st.write(f"Linear Regression - MAE: {lr_mae:.4f}, R²: {lr_r2:.4f}")
     
-    # แสดงกราฟเปรียบเทียบค่าที่ทำนายกับค่าจริง
-    st.subheader("📊 Predicted vs Actual Goals")
+
+    st.subheader("📊 Predicted vs Actual Goals")    
     plt.figure(figsize=(8, 5))
     sns.scatterplot(x=y_test, y=rf_preds, label="Random Forest", alpha=0.6)
     sns.scatterplot(x=y_test, y=lr_preds, label="Linear Regression", alpha=0.6)
@@ -123,7 +162,7 @@ def preexpectedgoal():
     plt.legend()
     st.pyplot(plt)
     
-    # แสดง Residual Plot
+
     st.subheader("📉 Residual Plot")
     rf_residuals = y_test - rf_preds
     lr_residuals = y_test - lr_preds
@@ -137,7 +176,6 @@ def preexpectedgoal():
     plt.title("Residual Plot")
     plt.legend()
     st.pyplot(plt)
-
 
 def home2():
     st.title("Lung Disease Prediction Model Description")
@@ -217,6 +255,11 @@ def home2():
     5. **Model Evaluation**: After training, we evaluate the model's **accuracy** and **loss** to assess its performance.
     """)
 
+    st.header("Model Evaluation")
+    st.write("""
+    After training, the model is evaluated on the test set to assess its performance in terms of accuracy.
+    The loss and accuracy plots are displayed to track the model's learning process.
+    """)
    
     st.header("Deployment")
     st.write("""
@@ -226,37 +269,30 @@ def home2():
 def predrecover():
     st.title("Lung Disease Prediction Model")
 
-    # Load and preprocess the dataset
     @st.cache_resource    
     def train_model():
         df = pd.read_csv("lung_disease_data.csv")
 
-        # Handle missing values
         num_cols = ["Age", "Lung Capacity", "Hospital Visits"]
         df[num_cols] = df[num_cols].fillna(df[num_cols].median())
 
         cat_cols = ["Gender", "Smoking Status", "Disease Type", "Treatment Type", "Recovered"]
         df[cat_cols] = df[cat_cols].fillna(df[cat_cols].mode().iloc[0])
 
-        # Encode categorical variables
         label_encoders = {}
         for col in cat_cols:
             le = LabelEncoder()
             df[col] = le.fit_transform(df[col])
             label_encoders[col] = le
 
-        # Prepare features and target
         X = df.drop(columns=["Recovered"])
         y = df["Recovered"]
 
-        # Normalize numeric features
         scaler = StandardScaler()
         X[num_cols] = scaler.fit_transform(X[num_cols])
 
-        # Split dataset
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-        # Define and compile model
+        
         model = keras.Sequential([
             Dense(512, activation='relu', input_shape=(X_train.shape[1],)),
             BatchNormalization(),
@@ -274,15 +310,12 @@ def predrecover():
 
         model.compile(optimizer="adam", loss="binary_crossentropy", metrics=["accuracy"])
 
-        # Train model
         history = model.fit(X_train, y_train, epochs=100, batch_size=64, validation_split=0.2)
 
         return model, scaler, label_encoders, history
 
-    # Train and cache the model
     model, scaler, label_encoders, history = train_model()
 
-    # Display accuracy and loss plots
     st.subheader("Model Performance")
     fig, ax = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -302,7 +335,6 @@ def predrecover():
 
     st.pyplot(fig)   
 
-    # User inputs
     st.subheader("Input Data for Prediction")
     age = st.number_input("Enter Age", min_value=0, max_value=120, value=30)
     lung_capacity = st.number_input("Enter Lung Capacity", min_value=0.5, max_value=6.0, value=3.5)
@@ -313,7 +345,6 @@ def predrecover():
     disease_type = st.selectbox("Select Disease Type", ["Asthma", "COPD", "Pneumonia"])
     treatment_type = st.selectbox("Select Treatment Type", ["Medication", "Therapy", "Surgery"])
 
-    # Prediction button
     if st.button("Predict Outcome"):
         user_data = {
             "Age": age,
@@ -325,7 +356,6 @@ def predrecover():
             "Treatment Type": treatment_type
         }
 
-        # Encode and normalize input
         user_data_encoded = pd.DataFrame([user_data])
         for col in ["Gender", "Smoking Status", "Disease Type", "Treatment Type"]:
             le = label_encoders[col]
@@ -336,7 +366,6 @@ def predrecover():
 
         user_data_encoded[["Age", "Lung Capacity", "Hospital Visits"]] = scaler.transform(user_data_encoded[["Age", "Lung Capacity", "Hospital Visits"]])
 
-        # Make prediction
         prediction = model.predict(user_data_encoded)
         if prediction[0][0] > 0.5:
             st.write("Prediction: The person is likely to recover.")
